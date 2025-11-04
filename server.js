@@ -16,7 +16,7 @@ const client = new Client({
 // Google Sheet
 const auth = new JWT({
   email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-  key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n').trim(),
+  key: process.env.GOOGLE_PRIVATE_KEY,
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 const doc = new GoogleSpreadsheet(process.env.SHEET_ID, auth);
