@@ -1,4 +1,3 @@
-cat > server.js << 'EOF'
 const express = require('express');
 const line = require('@line/bot-sdk');
 const bodyParser = require('body-parser');
@@ -214,4 +213,3 @@ app.get('/', (req, res) => {
 
 const port = process.env.PORT || 10000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
-EOF
