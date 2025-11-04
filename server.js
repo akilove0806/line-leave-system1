@@ -49,17 +49,16 @@ async function handleEvent(event) {
     }
   }
 
-  // 處理按鈕回應
   if (event.type === 'postback') {
     return handlePostback(event);
   }
 }
 
+const userStates = {};
+
 function getUserState(userId) {
   return userStates[userId];
 }
-
-const userStates = {};
 
 function startLeaveFlow(event, userId) {
   userStates[userId] = { step: 'startDate' };
@@ -94,7 +93,8 @@ async function handleLeaveStep(event, userId, text, state) {
 
 async function submitLeaveRequest(event, userId, state) {
   const sheets = await getSheets();
-  const spreadsheetId = process.env.SPREADSHEET_ID;
+  // 你的試算表 ID 已寫入
+  const spreadsheetId = '1bB_8XUYpzZWRT0Sld0cXaovNpePayTy2rSGpAOqhxto';
   const profile = await client.getProfile(userId);
 
   const row = [
@@ -188,7 +188,7 @@ async function handlePostback(event) {
   if (!request) return;
 
   const sheets = await getSheets();
-  const spreadsheetId = process.env.SPREADSHEET_ID;
+  const spreadsheetId = '1bB_8XUYpzZWRT0Sld0cXaovNpePayTy2rSGpAOqhxto';
   const status = data.action === 'approve' ? '已核准' : '已駁回';
 
   await sheets.spreadsheets.values.update({
@@ -209,7 +209,7 @@ async function handlePostback(event) {
 }
 
 app.get('/', (req, res) => {
-  res.send('LINE 請假系統運行中（含主管審核）');
+  res.send('LINE 請假系統運行中（你的試算表已連結）');
 });
 
 const port = process.env.PORT || 10000;
