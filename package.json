@@ -1,19 +1,5 @@
 {
-  "name": "line-leave-system",
-  "version": "1.0.0",
-  "description": "LINE 請假系統（連接 Google 試算表）",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "engines": {
-    "node": "18.x"
-  },
-  "dependencies": {
-    "@line/bot-sdk": "^7.5.0",
-    "body-parser": "^1.20.2",
-    "express": "^4.18.2",
-    "googleapis": "^144.0.0"
-  }
+  "name": "line-leave",
+  "version": "1.0",
+  "dependencies": {"express":"^4.18","node-fetch":"^2.6"}
 }
-
