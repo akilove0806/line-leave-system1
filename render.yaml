@@ -1,22 +1,10 @@
-cat > render.yaml << 'EOF'
 services:
   - type: web
-    name: line-leave-system
+    name: line-leave-system1
     env: node
-    region: singapore
-    plan: free
-
-    buildCommand: "npm install"
-    startCommand: "node server.js"
-    autoDeploy: true
-
+    buildCommand: npm install
+    startCommand: node server.js
     envVars:
-      - key: LINE_CHANNEL_SECRET
+      - key: GAS_URL
         sync: false
-      - key: LINE_CHANNEL_ACCESS_TOKEN
-        sync: false
-      - key: ADMIN_LINE_USER_ID
-        sync: false
-      - key: PORT
-        value: "10000"
-EOF
+    postDeployCommand: (while true; do curl -s $RENDER_EXTERNAL_URL/ping; sleep 240; done) &
