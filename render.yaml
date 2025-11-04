@@ -1,0 +1,26 @@
+cat > render.yaml << 'EOF'
+services:
+  - type: web
+    name: line-leave-system
+    env: node
+    region: singapore
+    plan: free
+
+    buildCommand: "npm install"
+    startCommand: "node server.js"
+    autoDeploy: true
+
+    envVars:
+      - key: LINE_CHANNEL_SECRET
+        sync: false
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: ADMIN_LINE_USER_ID
+        sync: false
+      - key: PORT
+        value: "10000"
+EOF
