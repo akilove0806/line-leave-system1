@@ -23,5 +23,5 @@ cat > README.md << 'EOF'
 | `PORT` | 10000 |
 
 ## 測試
-在 LINE 對 Bot 說：`請假`
+在 LINE 對 Bot 說：`請假``我要請假`
 EOF
