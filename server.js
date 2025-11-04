@@ -1,5 +1,3 @@
-cd $(git rev-parse --show-toplevel)
-cat > server.js << 'EOF'
 const express = require('express');
 const line = require('@line/bot-sdk');
 const bodyParser = require('body-parser');
