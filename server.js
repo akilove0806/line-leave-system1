@@ -2,126 +2,106 @@ require('dotenv').config();
 const express = require('express');
 const { Client, middleware } = require('@line/bot-sdk');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
+const { JWT } = require('google-auth-library');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// LINE 設定
-const lineConfig = {
+// LINE
+const client = new Client({
   channelSecret: process.env.CHANNEL_SECRET,
   channelAccessToken: process.env.CHANNEL_TOKEN,
-};
-const client = new Client(lineConfig);
+});
 
-// Google Sheet 設定
-const SHEET_ID = process.env.SHEET_ID;
-const doc = new GoogleSpreadsheet(SHEET_ID);
-async function initSheet() {
-  await doc.useServiceAccountAuth({
-    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-  });
-  await doc.loadInfo();
-}
-initSheet();
+// Google Sheet（新版 v5+ 寫法）
+const auth = new JWT({
+  email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+  key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+});
+const doc = new GoogleSpreadsheet(process.env.SHEET_ID, auth);
 
-// 讓 Render 知道健康
-app.get('/', (req, res) => res.send('立發 3.0 活著！'));
+// 健康檢查
+app.get('/', (req, res) => res.send('立發 3.2 活著！'));
 
 // Webhook
-app.post('/webhook', middleware(lineConfig), async (req, res) => {
-  const events = req.body.events;
-  for (const event of events) {
-    if (event.type === 'message' && event.message.text === '請假') {
-      await startLeaveFlow(event);
-    }
-    if (event.type === 'postback') {
-      await handlePostback(event);
-    }
+app.post('/webhook', middleware({
+  channelSecret: process.env.CHANNEL_SECRET,
+  channelAccessToken: process.env.CHANNEL_TOKEN
+}), async (req, res) => {
+  for (const event of req.body.events) {
+    if (event.type === 'message' && event.message.text === '請假') await startLeave(event);
+    if (event.type === 'postback') await handleApprove(event);
   }
   res.sendStatus(200);
 });
 
 // 開始請假
-async function startLeaveFlow(event) {
+async function startLeave(event) {
+  await doc.loadInfo(); // 這行一定要！
   const profile = await client.getProfile(event.source.userId);
-  const row = {
-    timestamp: new Date().toLocaleString('zh-TW'),
-    name: profile.displayName,
-    lineId: event.source.userId,
-    type: '請假',
-    kind: '特休',
-    start: '2025/11/10 09:00',
-    end: '2025/11/10 17:00',
-    hours: 7,
-    reason: '參加婚禮',
-    sup: '待簽',
-    hr: '待簽'
-  };
+  const sheet = doc.sheetsByTitle['立發人資管理總表'];
+  
+  const addedRow = await sheet.addRow({
+    提交時間: new Date().toLocaleString('zh-TW'),
+    員工姓名: profile.displayName,
+    LINE_ID: event.source.userId,
+    類型: '請假',
+    假別: '特休',
+    開始時間: '2025/11/10 09:00',
+    結束時間: '2025/11/10 17:00',
+    時數: 7,
+    原因: '參加婚禮',
+    主管簽核: '待簽',
+    HR簽核: '待簽'
+  });
 
-  // 存 Sheet
-  const sheet = doc.sheetsByTitle[process.env.SHEET_NAME];
-  const addedRow = await sheet.addRow(row);
-  const rowNum = addedRow.rowNumber;
-
-  // 推 Flex 卡片給主管
-  await pushToSupervisors(rowNum, row, profile.displayName);
+  await pushCard(addedRow.rowNumber, profile.displayName);
   await client.replyMessage(event.replyToken, { type: 'text', text: '✅ 已送出！主管收到卡片' });
 }
 
-// Flex 卡片
-async function pushToSupervisors(rowNum, data, name) {
+// 推卡片給主管
+async function pushCard(rowNum, name) {
   const bubble = {
     type: 'bubble',
-    header: { type: 'box', layout: 'vertical', contents: [{ type: 'text', text: '✨ 立發新假單', color: '#FFFFFF', weight: 'bold' }], backgroundColor: '#0066FF' },
+    header: { type: 'box', layout: 'vertical', contents: [{ type: 'text', text: '✨ 立發新假單', color: '#fff', weight: 'bold' }], backgroundColor: '#0066FF' },
     hero: { type: 'image', url: 'https://i.imgur.com/2nT3Y0b.png', size: 'full' },
     body: { type: 'box', layout: 'vertical', contents: [
       { type: 'text', text: name, size: 'xl', weight: 'bold' },
-      { type: 'text', text: `${data.kind}｜${data.hours} 小時`, color: '#666' },
+      { type: 'text', text: '特休｜7 小時', color: '#666' },
       { type: 'separator', margin: 'lg' },
-      { type: 'box', layout: 'baseline', contents: [{ type: 'text', text: '時間' }, { type: 'text', text: `${data.start} ～ ${data.end}` }]},
-      { type: 'box', layout: 'baseline', contents: [{ type: 'text', text: '原因' }, { type: 'text', text: data.reason }]},
+      { type: 'text', text: '11/10 09:00 ～ 17:00' },
+      { type: 'text', text: '原因：參加婚禮' },
     ]},
     footer: { type: 'box', layout: 'vertical', contents: [
-      { type: 'button', style: 'primary', action: { type: 'postback', label: '✅ 核准', data: `sup_ok=${rowNum}` }},
-      { type: 'button', style: 'secondary', action: { type: 'postback', label: '❌ 駁回', data: `sup_no=${rowNum}` }},
+      { type: 'button', style: 'primary', action: { type: 'postback', label: '✅ 核准', data: `ok=${rowNum}` }},
+      { type: 'button', style: 'secondary', action: { type: 'postback', label: '❌ 駁回', data: `no=${rowNum}` }},
     ]}
   };
-  const supervisors = await getLineIdsByRole('主管');
+  const supervisors = await getIds('主管');
   for (const id of supervisors) {
     await client.pushMessage(id, { type: 'flex', altText: '新假單', contents: bubble });
   }
 }
 
 // 簽核
-async function handlePostback(event) {
-  const data = event.postback.data;
-  const [action, row] = data.split('=');
-  const sheet = doc.sheetsByTitle[process.env.SHEET_NAME];
+async function handleApprove(event) {
+  await doc.loadInfo();
+  const sheet = doc.sheetsByTitle['立發人資管理總表'];
   const rows = await sheet.getRows();
-  const targetRow = rows[row - 2]; // Sheet 從第 2 列開始
-
-  if (action === 'sup_ok') {
-    targetRow.sup = '核准';
-    await targetRow.save();
-    await client.replyMessage(event.replyToken, { type: 'text', text: '✅ 已核准' });
-    await pushToHR(row, targetRow);
-  } else {
-    targetRow.sup = '駁回';
-    await targetRow.save();
-    await client.pushMessage(event.source.userId, { type: 'text', text: '❌ 主管駁回' });
-  }
-}
-
-async function pushToHR(row, data) {
-  // 同上，改推給 HR...
+  const [action, num] = event.postback.data.split('=');
+  const row = rows[Number(num) - 2];
+  row.主管簽核 = action === 'ok' ? '核准' : '駁回';
+  await row.save();
+  await client.replyMessage(event.replyToken, { type: 'text', text: action === 'ok' ? '✅ 已核准' : '❌ 已駁回' });
 }
 
 // 拿 LINE ID
-async function getLineIdsByRole(role) {
-  const sheet = doc.sheetsByTitle[process.env.ID_SHEET];
-  const rows = await sheet.getRows();
+async function getIds(role) {
+  await doc.loadInfo();
+  const idSheet = doc.sheetsByTitle['LINE_ID對照表'];
+  const rows = await idSheet.getRows();
   return rows.filter(r => r.get('角色') === role).map(r => r.get('LINE ID'));
 }
 
-app.listen(PORT, () => console.log(`立發 3.0 活在 ${PORT}`));
+app.listen(PORT, () => console.log(`立發 3.2 活在 ${PORT}`));
