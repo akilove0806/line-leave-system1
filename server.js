@@ -1,3 +1,5 @@
+cd $(git rev-parse --show-toplevel)
+cat > server.js << 'EOF'
 const express = require('express');
 const line = require('@line/bot-sdk');
 const bodyParser = require('body-parser');
@@ -13,11 +15,11 @@ const config = {
 };
 const client = new line.Client(config);
 
-// 暫存請假申請與 row index
+// 暫存
 const pendingRequests = {};
 const userStates = {};
 
-// 內建 Service Account JSON（你的）
+// 內建 Service Account JSON
 const BUILTIN_SERVICE_ACCOUNT = {
   "type": "service_account",
   "project_id": "mineral-voyage-477107-c7",
@@ -33,18 +35,18 @@ const BUILTIN_SERVICE_ACCOUNT = {
 };
 
 async function getSheets() {
-  let credentials = BUILTIN_SERVICE_ACCOUNT;  // 預設用內建
+  let credentials = BUILTIN_SERVICE_ACCOUNT;
   const envJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
 
   if (envJson && envJson.trim() !== '') {
     try {
       credentials = JSON.parse(envJson);
-      console.log("Using environment Service Account JSON");
+      console.log("Using environment JSON");
     } catch (e) {
-      console.warn("Invalid GOOGLE_SERVICE_ACCOUNT_JSON, using built-in");
+      console.warn("Invalid JSON in env, using built-in");
     }
   } else {
-    console.log("No environment JSON, using built-in Service Account");
+    console.log("Using built-in Service Account JSON");
   }
 
   const auth = new google.auth.GoogleAuth({
@@ -53,9 +55,6 @@ async function getSheets() {
   });
   return google.sheets({ version: 'v4', auth });
 }
-
-// 其餘程式碼不變...
-// (handleEvent, submitLeaveRequest, handlePostback 等)
 
 app.post('/webhook', async (req, res) => {
   try {
@@ -68,40 +67,42 @@ app.post('/webhook', async (req, res) => {
 });
 
 async function handleEvent(event) {
-  if (event.type === 'message' && event.message.type === 'text') {
-    const userId = event.source.userId;
-    const text = event.message.text.trim();
+  if (event.type !== 'message' || event.message.type !== 'text') return;
+  const userId = event.source.userId;
+  const text = event.message.text.trim();
 
-    if (text === '請假') {
-      userStates[userId] = { step: 'startDate' };
-      return client.replyMessage(event.replyToken, { type: 'text', text: '請輸入開始日期 (YYYY-MM-DD)' });
-    }
+  if (text === '請假') {
+    userStates[userId] = { step: 'startDate' };
+    return client.replyMessage(event.replyToken, { type: 'text', text: '請輸入開始日期 (YYYY-MM-DD)' });
+  }
 
-    const state = userStates[userId];
-    if (!state) return;
+  const state = userStates[userId];
+  if (!state) return;
 
-    if (state.step === 'startDate') {
-      state.startDate = text; state.step = 'endDate';
-      return client.replyMessage(event.replyToken, { type: 'text', text: '請輸入結束日期 (YYYY-MM-DD)' });
-    }
-    if (state.step === 'endDate') {
-      state.endDate = text; state.step = 'type';
-      return client.replyMessage(event.replyToken, { type: 'text', text: '請輸入假別 (事假/病假/公假...)' });
-    }
-    if (state.step === 'type') {
-      state.type = text; state.step = 'reason';
-      return client.replyMessage(event.replyToken, { type: 'text', text: '請輸入請假原因' });
-    }
-    if (state.step === 'reason') {
+  try {
+    if (state.step === 'startDate') { state.startDate = text; state.step = 'endDate'; }
+    else if (state.step === 'endDate') { state.endDate = text; state.step = 'type'; }
+    else if (state.step === 'type') { state.type = text; state.step = 'reason'; }
+    else if (state.step === 'reason') {
       state.reason = text;
       await submitLeaveRequest(event, userId, state);
       delete userStates[userId];
+      return;
     }
+    client.replyMessage(event.replyToken, { type: 'text', text: getNextPrompt(state.step) });
+  } catch (err) {
+    console.error("Flow error:", err);
+    client.replyMessage(event.replyToken, { type: 'text', text: '系統錯誤，請重新輸入「請假」' });
   }
+}
 
-  if (event.type === 'postback') {
-    return handlePostback(event);
-  }
+function getNextPrompt(step) {
+  const prompts = {
+    startDate: '請輸入結束日期 (YYYY-MM-DD)',
+    endDate: '請輸入假別 (事假/病假/公假...)',
+    type: '請輸入請假原因',
+  };
+  return prompts[step] || '';
 }
 
 async function submitLeaveRequest(event, userId, state) {
@@ -133,19 +134,18 @@ async function submitLeaveRequest(event, userId, state) {
 
     const adminId = process.env.ADMIN_LINE_USER_ID;
     if (adminId) {
-      await client.pushMessage(adminId, { /* Flex Message */ });
+      await client.pushMessage(adminId, { type: 'text', text: `新請假：${profile.displayName} ${state.startDate}~${state.endDate}` });
     }
 
-    return client.replyMessage(event.replyToken, { type: 'text', text: '已提交請假申請，等待主管審核！' });
+    client.replyMessage(event.replyToken, { type: 'text', text: '已提交請假申請，等待主管審核！' });
   } catch (err) {
     console.error("Submit error:", err);
-    return client.replyMessage(event.replyToken, { type: 'text', text: '系統錯誤，請稍後再試。' });
+    client.replyMessage(event.replyToken, { type: 'text', text: '提交失敗，請稍後再試。' });
   }
 }
-
-// handlePostback 略...
 
 app.get('/', (req, res) => res.send('LINE 請假系統運行中'));
 
 const port = process.env.PORT || 10000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
+EOF
