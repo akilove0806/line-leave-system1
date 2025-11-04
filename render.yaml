@@ -1,10 +1,15 @@
 services:
   - type: web
-    name: line-leave-system1
+    name: lifa-hr-bot
     env: node
     buildCommand: npm install
-    startCommand: node server.js
+    startCommand: npm start
     envVars:
-      - key: GAS_URL
+      CHANNEL_SECRET:
         sync: false
-    postDeployCommand: (while true; do curl -s $RENDER_EXTERNAL_URL/ping; sleep 240; done) &
+      CHANNEL_TOKEN:
+        sync: false
+      SHEET_ID:
+        sync: false
+      SHEET_NAME: 立發人資管理總表
+      ID_SHEET: LINE_ID對照表
