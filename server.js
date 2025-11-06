@@ -28,9 +28,9 @@ app.post('/webhook', middleware(client.config), async (req, res) => {
     const userId = event.source?.userId;
     if (!userId) continue;
 
-    const message = event.message?.text?.trim() || "";
+    const text = event.message?.text?.trim() || "";
 
-    if (message === "請假" || message === "我要請假") await startLeaveFlow(event);
+    if (text === "請假" || text === "我要請假") await startLeaveFlow(event);
     else if (userState[userId]?.step === "bind_name") await bindName(event);
     else if (userState[userId]?.step === "input") await processLeaveInput(event);
     else if (userState[userId]?.step === "confirm") await confirmLeave(event);
@@ -48,7 +48,7 @@ async function startLeaveFlow(event) {
     await client.replyMessage(event.replyToken, { type: 'text', text: "首次使用，請回覆姓名綁定（如王小明）" });
     userState[userId] = { step: "bind_name" };
   } else {
-    await client.replyMessage(event.replyToken, { type: 'text', text: "格式：請假 開始時間 結束時間 假別 原因\n範例：請假 2025-11-10 09:00 2025-11-10 17:00 特休 私事處理\n全天：請假 2025-11-11 特休 私事處理" });
+    await client.replyMessage(event.replyToken, { type: 'text', text: "請假格式：\n請假 日期 假別 原因（如：請假 2025-11-11 特休 私事處理）\n或：請假 開始時間 結束時間 假別 原因" });
     userState[userId] = { step: "input" };
   }
 }
@@ -78,7 +78,7 @@ async function processLeaveInput(event) {
     start = parts[1] + " 08:00";
     end = parts[1] + " 17:00";
     kind = parts[2];
-    reason = parts.slice(3).join(" ");
+    reason = parts[3];
   } else if (parts.length >= 6) {
     start = parts[1] + " " + parts[2];
     end = parts[3] + " " + parts[4];
@@ -120,8 +120,7 @@ async function confirmLeave(event) {
 
 // 計算時數
 function calcHours(start, end) {
-  let h = 0;
-  let cur = new Date(start);
+  let h = 0, cur = new Date(start);
   while (cur < end) {
     const day = cur.getDay(), hour = cur.getHours();
     if (day >= 1 && day <= 5 && ((hour >= 8 && hour < 12) || (hour >= 13 && hour < 17))) h++;
