@@ -1,15 +1,22 @@
 services:
   - type: web
-    name: lifa-hr-bot
+    name: line-leave-bot
     env: node
+    plan: free  # 或 starter 視需求
     buildCommand: npm install
     startCommand: npm start
     envVars:
-      CHANNEL_SECRET:
+      - key: NODE_ENV
+        value: production
+      - key: CHANNEL_ACCESS_TOKEN
+        sync: false  # 手動輸入機密
+      - key: CHANNEL_SECRET
         sync: false
-      CHANNEL_TOKEN:
+      - key: GOOGLE_CREDENTIALS
         sync: false
-      SHEET_ID:
+      - key: SUPERVISOR_ID
         sync: false
-      SHEET_NAME: 立發人資管理總表
-      ID_SHEET: LINE_ID對照表
+      - key: HR_ID
+        sync: false
+      - key: SHEETS_ID
+        sync: false
