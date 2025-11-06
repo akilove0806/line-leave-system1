@@ -1,167 +1,158 @@
-require('dotenv').config();
+require('dotenv').config();  // 如果本地測試用 .env
 const express = require('express');
 const { Client, middleware } = require('@line/bot-sdk');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
-const { JWT } = require('google-auth-library');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
+const port = process.env.PORT || 3000;
 
-const client = new Client({
-  channelSecret: process.env.CHANNEL_SECRET,
-  channelAccessToken: process.env.CHANNEL_TOKEN,
-});
+// LINE 配置
+const lineConfig = {
+  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
+  channelSecret: process.env.CHANNEL_SECRET
+};
+const client = new Client(lineConfig);
 
-const auth = new JWT({
-  email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-  key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-  scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
-const doc = new GoogleSpreadsheet(process.env.SHEET_ID, auth);
+// Google Sheets 配置
+const sheetsId = process.env.SHEETS_ID;
+const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+const supervisorId = process.env.SUPERVISOR_ID;
+const hrId = process.env.HR_ID;
 
-const LOG_SHEET = "立發人資管理總表";
-const ID_SHEET = "LINE_ID對照表";
+// 連線 Sheets
+async function getSheet() {
+  const doc = new GoogleSpreadsheet(sheetsId);
+  await doc.useServiceAccountAuth(credentials);
+  await doc.loadInfo();
+  return doc.sheetsByIndex[0];  // 第一個工作表
+}
 
-let userState = {};
+// 找行由 ID
+async function findRowById(sheet, leaveId) {
+  await sheet.loadCells();
+  const rows = await sheet.getRows();
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].getCell(0).value === leaveId) {
+      return i + 2;  // 行號從 2 開始 (跳過標頭)
+    }
+  }
+  return null;
+}
 
-app.post('/webhook', middleware(client.config), async (req, res) => {
-  for (const event of req.body.events) {
-    const userId = event.source?.userId;
-    if (!userId) continue;
+// 取得請假細節
+async function getLeaveDetails(sheet, rowIndex) {
+  await sheet.loadCells();
+  const row = sheet.getRow(rowIndex);
+  return {
+    start: row[3], end: row[4], type: row[2], reason: row[8]
+  };
+}
 
-    const text = event.message?.text?.trim() || "";
+// 通知主管
+async function notifySupervisor(leaveId, start, end, leaveType, reason) {
+  const message = {
+    type: 'text',
+    text: `新請假申請 ID: ${leaveId}\n日期: ${start} 到 ${end}\n類型: ${leaveType}\n理由: ${reason}`,
+    quickReply: {
+      items: [
+        { type: 'action', action: { type: 'postback', label: '批准', data: `approve:${leaveId}` } },
+        { type: 'action', action: { type: 'postback', label: '拒絕', data: `reject:${leaveId}` } }
+      ]
+    }
+  };
+  await client.pushMessage(supervisorId, message);
+}
 
-    if (text === "請假" || text === "我要請假") await startLeaveFlow(event);
-    else if (userState[userId]?.step === "bind_name") await bindName(event);
-    else if (userState[userId]?.step === "input") await processLeaveInput(event);
-    else if (userState[userId]?.step === "confirm") await confirmLeave(event);
-    else if (event.type === "postback") await handleApprove(event);
+// 通知 HR
+async function notifyHr(leaveId, start, end, leaveType, reason) {
+  const message = {
+    type: 'text',
+    text: `主管批准請假 ID: ${leaveId}\n日期: ${start} 到 ${end}\n類型: ${leaveType}\n理由: ${reason}`,
+    quickReply: {
+      items: [
+        { type: 'action', action: { type: 'postback', label: '批准', data: `approve:${leaveId}` } },
+        { type: 'action', action: { type: 'postback', label: '拒絕', data: `reject:${leaveId}` } }
+      ]
+    }
+  };
+  await client.pushMessage(hrId, message);
+}
+
+// Webhook
+app.post('/webhook', middleware(lineConfig), async (req, res) => {
+  const events = req.body.events;
+  for (const event of events) {
+    if (event.type === 'message' && event.message.type === 'text') {
+      const text = event.message.text.trim();
+      if (text.startsWith('請假')) {
+        const parts = text.split(/\s+/);
+        if (parts.length < 5) {
+          await client.replyMessage(event.replyToken, { type: 'text', text: '格式錯誤，請用: 請假 開始日期 到 結束日期 假別 [理由]' });
+          continue;
+        }
+        const startDate = parts[1];
+        const endDate = parts[3];
+        const leaveType = parts[4];
+        const reason = parts.slice(5).join(' ') || '無';
+
+        const leaveId = uuidv4();
+        const timestamp = new Date().toISOString();
+
+        const sheet = await getSheet();
+        await sheet.addRow([leaveId, event.source.userId, leaveType, startDate, endDate, 'pending_supervisor', '', timestamp, reason]);
+
+        await client.replyMessage(event.replyToken, { type: 'text', text: `申請提交，ID: ${leaveId}` });
+        await notifySupervisor(leaveId, startDate, endDate, leaveType, reason);
+      }
+    } else if (event.type === 'postback') {
+      const data = event.postback.data;
+      const [action, leaveId] = data.split(':');
+
+      const sheet = await getSheet();
+      const rowIndex = await findRowById(sheet, leaveId);
+      if (!rowIndex) continue;
+
+      await sheet.loadCells();
+      let status = sheet.getCellByA1(`F${rowIndex}`).value;
+      let history = sheet.getCellByA1(`G${rowIndex}`).value || '';
+      const timestamp = new Date().toISOString();
+
+      if (action === 'approve') {
+        if (status === 'pending_supervisor') {
+          status = 'pending_hr';
+          history += `Supervisor approved at ${timestamp}; `;
+          sheet.getCellByA1(`F${rowIndex}`).value = status;
+          sheet.getCellByA1(`G${rowIndex}`).value = history;
+          await sheet.saveUpdatedCells();
+
+          const details = await getLeaveDetails(sheet, rowIndex);
+          await notifyHr(leaveId, details.start, details.end, details.type, details.reason);
+        } else if (status === 'pending_hr') {
+          status = 'approved';
+          history += `HR approved at ${timestamp}; `;
+          sheet.getCellByA1(`F${rowIndex}`).value = status;
+          sheet.getCellByA1(`G${rowIndex}`).value = history;
+          await sheet.saveUpdatedCells();
+
+          const userId = sheet.getCellByA1(`B${rowIndex}`).value;
+          await client.pushMessage(userId, { type: 'text', text: `請假 ID: ${leaveId} 已完成` });
+        }
+      } else if (action === 'reject') {
+        status = 'rejected';
+        history += `Rejected at ${timestamp}; `;
+        sheet.getCellByA1(`F${rowIndex}`).value = status;
+        sheet.getCellByA1(`G${rowIndex}`).value = history;
+        await sheet.saveUpdatedCells();
+
+        const userId = sheet.getCellByA1(`B${rowIndex}`).value;
+        await client.pushMessage(userId, { type: 'text', text: `請假 ID: ${leaveId} 被拒絕` });
+      }
+    }
   }
   res.sendStatus(200);
 });
 
-// 開始請假
-async function startLeaveFlow(event) {
-  await doc.loadInfo();
-  const userId = event.source.userId;
-  const name = await getBoundName(userId);
-  if (!name) {
-    await client.replyMessage(event.replyToken, { type: 'text', text: "首次使用，請回覆姓名綁定（如王小明）" });
-    userState[userId] = { step: "bind_name" };
-  } else {
-    await client.replyMessage(event.replyToken, { type: 'text', text: "請假格式：\n請假 日期 假別 原因（如：請假 2025-11-11 特休 私事處理）\n或：請假 開始時間 結束時間 假別 原因" });
-    userState[userId] = { step: "input" };
-  }
-}
-
-// 綁定姓名
-async function bindName(event) {
-  await doc.loadInfo();
-  const userId = event.source.userId;
-  const name = event.message.text.trim();
-  if (!name) return client.replyMessage(event.replyToken, { type: 'text', text: "姓名不能空" });
-  await saveBoundName(userId, name);
-  await client.replyMessage(event.replyToken, { type: 'text', text: `綁定完成：${name}\n開始請假` });
-  delete userState[userId];
-  await startLeaveFlow(event);
-}
-
-// 處理輸入
-async function processLeaveInput(event) {
-  await doc.loadInfo();
-  const userId = event.source.userId;
-  const parts = event.message.text.trim().split(" ").filter(Boolean);
-
-  if (parts[0] !== "請假" || parts.length < 4) return client.replyMessage(event.replyToken, { type: 'text', text: "格式錯誤，請重試" });
-
-  let start, end, kind, reason;
-  if (parts.length === 4) {
-    start = parts[1] + " 08:00";
-    end = parts[1] + " 17:00";
-    kind = parts[2];
-    reason = parts.slice(3).join(" ");
-  } else if (parts.length >= 6) {
-    start = parts[1] + " " + parts[2];
-    end = parts[3] + " " + parts[4];
-    kind = parts[5];
-    reason = parts.slice(6).join(" ");
-  } else {
-    return client.replyMessage(event.replyToken, { type: 'text', text: "格式錯誤" });
-  }
-
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  if (isNaN(startDate) || isNaN(endDate) || startDate >= endDate) return client.replyMessage(event.replyToken, { type: 'text', text: "時間錯誤" });
-
-  const hours = calcHours(startDate, endDate);
-  const summary = `確認：\n假別：${kind}\n開始：${start}\n結束：${end}\n時數：${hours} 小時\n原因：${reason}\n\n是/否？`;
-  await client.replyMessage(event.replyToken, { type: 'text', text: summary });
-  userState[userId] = { step: "confirm", data: { start, end, kind, reason, hours } };
-}
-
-// 確認
-async function confirmLeave(event) {
-  await doc.loadInfo();
-  const userId = event.source.userId;
-  const msg = event.message.text.trim().toLowerCase();
-  const state = userState[userId];
-
-  if (msg === "是") {
-    await saveToSheet(userId, state.data);
-    await client.replyMessage(event.replyToken, { type: 'text', text: "已送出" });
-    await renderLog(event, state.data);
-    delete userState[userId];
-  } else if (msg === "否") {
-    await client.replyMessage(event.replyToken, { type: 'text', text: "已取消" });
-    delete userState[userId];
-  } else {
-    await client.replyMessage(event.replyToken, { type: 'text', text: "請回「是」或「否」" });
-  }
-}
-
-// 計算時數
-function calcHours(start, end) {
-  let h = 0, cur = new Date(start);
-  while (cur < end) {
-    const day = cur.getDay(), hour = cur.getHours();
-    if (day >= 1 && day <= 5 && ((hour >= 8 && hour < 12) || (hour >= 13 && hour < 17))) h++;
-    cur.setHours(cur.getHours() + 1);
-  }
-  return h;
-}
-
-// 存 Sheet
-async function saveToSheet(userId, d) {
-  await doc.loadInfo();
-  const sheet = doc.sheetsByTitle[LOG_SHEET];
-  const name = await getBoundName(userId);
-  await sheet.addRow([
-    new Date().toLocaleString('zh-TW'),
-    name,
-    userId,
-    d.start,
-    d.end,
-    d.kind,
-    d.reason,
-    d.hours,
-    "待簽",
-    "待簽",
-    "待處理"
-  ]);
-}
-
-// renderLog
-async function renderLog(event, d) {
-  await doc.loadInfo();
-  const name = await getBoundName(event.source.userId);
-  const sheet = doc.sheetsByTitle[LOG_SHEET];
-  const rowCount = sheet.rowCount;
-
-  const bubble = { /* 同 GAS 版 */ };
-  const msg = { type: "flex", altText: "新假來囉！", contents: bubble };
-  const supervisors = await getLineIdsByRole("主管");
-  for (const id of supervisors) await client.pushMessage(id, msg);
-}
-
-// 其他函式略...
-
-app.listen(process.env.PORT || 3000);
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
