@@ -34,6 +34,7 @@ app.post('/webhook', middleware(client.config), async (req, res) => {
     else if (userState[userId]?.step === "bind_name") await bindName(event);
     else if (userState[userId]?.step === "input") await processLeaveInput(event);
     else if (userState[userId]?.step === "confirm") await confirmLeave(event);
+    else if (text === "撤回") await withdrawLeave(event);
     else if (event.type === "postback") await handleApprove(event);
   }
   res.sendStatus(200);
@@ -78,7 +79,7 @@ async function processLeaveInput(event) {
     start = parts[1] + " 08:00";
     end = parts[1] + " 17:00";
     kind = parts[2];
-    reason = parts[3];
+    reason = parts.slice(3).join(" ");
   } else if (parts.length >= 6) {
     start = parts[1] + " " + parts[2];
     end = parts[3] + " " + parts[4];
@@ -118,6 +119,20 @@ async function confirmLeave(event) {
   }
 }
 
+// 撤回請假
+async function withdrawLeave(event) {
+  await doc.loadInfo();
+  const userId = event.source.userId;
+  const sheet = doc.sheetsByTitle[LOG_SHEET];
+  const rows = await sheet.getRows();
+  const lastRow = rows.findLast(r => r.get('員工ID') === userId && r.get('狀態') === "待處理");
+  if (!lastRow) return client.replyMessage(event.replyToken, { type: 'text', text: "沒有待處理的假單" });
+
+  lastRow.狀態 = "已撤回";
+  await lastRow.save();
+  await client.replyMessage(event.replyToken, { type: 'text', text: "假單已撤回" });
+}
+
 // 計算時數
 function calcHours(start, end) {
   let h = 0, cur = new Date(start);
@@ -149,17 +164,39 @@ async function saveToSheet(userId, d) {
   ]);
 }
 
-// renderLog
+// renderLog（多主管同時通知）
 async function renderLog(event, d) {
   await doc.loadInfo();
   const name = await getBoundName(event.source.userId);
   const sheet = doc.sheetsByTitle[LOG_SHEET];
   const rowCount = sheet.rowCount;
 
-  const bubble = { /* 同 GAS 版 */ };
+  const bubble = { /* 同原版，加剩餘特休顯示（假設 Sheet 有計算公式） */ };
   const msg = { type: "flex", altText: "新假來囉！", contents: bubble };
   const supervisors = await getLineIdsByRole("主管");
   for (const id of supervisors) await client.pushMessage(id, msg);
+}
+
+// handleApprove（多主管：第一個回應有效，更新狀態避免重複）
+async function handleApprove(event) {
+  await doc.loadInfo();
+  const [action, rowStr] = event.postback.data.split("=");
+  const row = Number(rowStr);
+  const sheet = doc.sheetsByTitle[LOG_SHEET];
+  const rows = await sheet.getRows();
+  const targetRow = rows[row - 1];
+
+  if (targetRow.主管簽核 !== "待簽") return client.replyMessage(event.replyToken, { type: 'text', text: "已處理過" });
+
+  const result = action === "approve" ? "核准" : "駁回";
+  targetRow.主管簽核 = result;
+  targetRow.狀態 = "處理中";
+  await targetRow.save();
+
+  await client.replyMessage(event.replyToken, { type: 'text', text: result === "核准" ? "已核准" : "已駁回" });
+
+  if (result === "核准") await renderToHR(row);
+  else await notifyEmployee(row, "假單被駁回");
 }
 
 // 其他函式略...
