@@ -1,15 +1,18 @@
-# 立發人資 3.0 - LINE 假勤 BOT
+# Awesome Leave Bot
 
-員工傳「我要請假」→ 主管 0.5 秒收到美美 Flex 卡片  
-一指頭核准 → HR 再簽 → 員工叮一聲 ✅
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/your-username/awesome-leave-bot/ci.yml)](https://github.com/your-username/awesome-leave-bot/actions)
 
-## 上線 30 秒
-1. 點 Render Deploy 鈕  
-2. 填 3 個欄位：  
-   - CHANNEL_SECRET  
-   - CHANNEL_TOKEN  
-   - SHEET_ID（立發人資管理總表網址中間那串）  
-3. 點 Deploy → 完成！
+一個簡單的 LINE Bot 請假系統，讓員工、主管和 HR 透過 LINE 訊息申請與審核請假。記錄儲存在 Google Sheets，易於部署到 Render.com。
 
-## 測試
-傳「我要請假」給 BOT → 看卡片飛出去！
+![Demo GIF](https://example.com/demo.gif)  <!-- 加截圖或 GIF 示範 -->
+
+## 功能
+- 員工提交請假申請（格式：`請假 開始日期 到 結束日期 假別 理由`）。
+- 多級審核：主管 → HR。
+- 自動通知和記錄留存。
+- 易整合 Google Sheets 作為資料庫。
+
+## 安裝
+1. Clone Repo：
