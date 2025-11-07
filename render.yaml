@@ -12,3 +12,34 @@
 
 ## 安裝
 1. Clone Repo：
+2. 安裝依賴：
+3. 設定環境變數（在 .env 或 Render.com）：
+- CHANNEL_ACCESS_TOKEN: LINE Channel Access Token
+- CHANNEL_SECRET: LINE Channel Secret
+- GOOGLE_CREDENTIALS: Google 服務帳戶 JSON
+- SUPERVISOR_ID: 主管 LINE ID
+- HR_ID: HR LINE ID
+
+4. 設定 Google Sheets：
+- ID: 1_-XKtS85CCKrLC1A_J0sB5EIE-wpRiFxWRNbOUKdOU0
+- 分享編輯權限給服務帳戶。
+- 欄位：A:ID, B:User_ID, C:Leave_Type, D:Start_Date, E:End_Date, F:Status, G:Approver_History, H:Timestamp, I:Reason
+
+## 用法
+1. 運行本地伺服器：
+2. 在 LINE Developers Console 設定 Webhook URL（如 https://your-app.onrender.com/webhook）。
+
+3. 使用：
+- 員工：加 Bot 好友，發 "請假 [開始日期] 到 [結束日期] [假別] [理由]"。
+- 主管/HR：收到通知，按 "批准" 或 "拒絕"。
+
+範例訊息：
+## 部署到 Render.com
+- 使用 render.yaml 檔案自動部署。
+- 在 Render Dashboard 加環境變數。
+
+## 貢獻
+歡迎 Pull Request！請先 fork Repo，修改後提交。
+
+## 授權
+MIT License - 詳見 [LICENSE](LICENSE) 檔案。
