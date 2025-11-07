@@ -12,8 +12,8 @@ from datetime import datetime
 app = Flask(__name__)
 
 # 載入環境變數（在 Render 加這些）
-CHANNEL_ACCESS_TOKEN = os.environ.get('CHANNEL_ACCESS_TOKEN')
-CHANNEL_SECRET = os.environ.get('CHANNEL_SECRET')
+CHANNEL_ACCESS_TOKEN = os.environ.get('MS8swHYK+bC0SEUgR173zpb9sLKx76Fy2jNZhY/fibGDCjLee7t2klL/3ywPi6vpTTb+LzzpmwhClyC1OYG4yyVFIEGsIdG47iNaENmbaIOMlXmKYdImvj/nPiaAzKPXPctIITVv2CSoKeP6IPz7SAdB04t89/1O/w1cDnyilFU=')
+CHANNEL_SECRET = os.environ.get('9cbc3546a1f2e970f818ba8309f48d43')
 GOOGLE_CREDENTIALS = os.environ.get('GOOGLE_CREDENTIALS')
 
 line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
