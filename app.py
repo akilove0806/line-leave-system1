@@ -24,11 +24,11 @@ credentials_dict = json.loads(GOOGLE_CREDENTIALS)
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
 client = gspread.authorize(creds)
-sheet = client.open_by_key('1_-XKtS85CCKrLC1A_J0sB5EIE-wpRiFxWRNbOUKdOU0').sheet1  # 使用你的 Sheets ID
+sheet = client.open_by_key('1_-XKtS85CCKrLC1A_J0sB5EIE-wpRiFxWRNbOUKdOU0').sheet1  # 你的 Sheets ID
 
-# 主管和 HR 的 LINE ID（硬碼或從 DB 取）
-SUPERVISOR_ID = 'YOUR_SUPERVISOR_LINE_ID'
-HR_ID = 'YOUR_HR_LINE_ID'
+# 主管和 HR 的 LINE ID（從環境變數取）
+SUPERVISOR_ID = os.environ.get('SUPERVISOR_ID')
+HR_ID = os.environ.get('HR_ID')
 
 @app.route("/webhook", methods=['POST'])
 def webhook():
