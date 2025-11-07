@@ -1,22 +1,20 @@
 services:
   - type: web
     name: line-leave-bot
-    env: node
+    env: python
     plan: free  # 或 starter 視需求
-    buildCommand: npm install
-    startCommand: npm start
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app  # 或 python app.py，如果簡單
     envVars:
-      - key: NODE_ENV
-        value: production
+      - key: PYTHON_VERSION
+        value: 3.10  # 選擇 Python 版本
       - key: CHANNEL_ACCESS_TOKEN
-        sync: false  # 手動輸入機密
+        sync: MS8swHYK+bC0SEUgR173zpb9sLKx76Fy2jNZhY/fibGDCjLee7t2klL/3ywPi6vpTTb+LzzpmwhClyC1OYG4yyVFIEGsIdG47iNaENmbaIOMlXmKYdImvj/nPiaAzKPXPctIITVv2CSoKeP6IPz7SAdB04t89/1O/w1cDnyilFU=
       - key: CHANNEL_SECRET
-        sync: false
+        sync: 9cbc3546a1f2e970f818ba8309f48d43
       - key: GOOGLE_CREDENTIALS
         sync: false
       - key: SUPERVISOR_ID
-        sync: false
+        sync: Ufc6e6eba7e9e9015d6cde1274767a15a
       - key: HR_ID
-        sync: false
-      - key: SHEETS_ID
-        sync: false
+        sync: Ufc6e6eba7e9e9015d6cde1274767a15a
