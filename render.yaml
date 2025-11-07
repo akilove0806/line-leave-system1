@@ -1,20 +1,14 @@
-services:
-  - type: web
-    name: line-leave-bot
-    env: python
-    plan: free  # 或 starter 視需求
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app  # 或 python app.py，如果簡單
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.10  # 選擇 Python 版本
-      - key: CHANNEL_ACCESS_TOKEN
-        sync: MS8swHYK+bC0SEUgR173zpb9sLKx76Fy2jNZhY/fibGDCjLee7t2klL/3ywPi6vpTTb+LzzpmwhClyC1OYG4yyVFIEGsIdG47iNaENmbaIOMlXmKYdImvj/nPiaAzKPXPctIITVv2CSoKeP6IPz7SAdB04t89/1O/w1cDnyilFU=
-      - key: CHANNEL_SECRET
-        sync: 9cbc3546a1f2e970f818ba8309f48d43
-      - key: GOOGLE_CREDENTIALS
-        sync: false
-      - key: SUPERVISOR_ID
-        sync: Ufc6e6eba7e9e9015d6cde1274767a15a
-      - key: HR_ID
-        sync: Ufc6e6eba7e9e9015d6cde1274767a15a
+# LINE Leave Bot (Python)
+
+一個基於 LINE 的請假系統，讓員工透過 LINE 提交請假申請，主管和 HR 用 LINE 簽核，所有記錄儲存在 Google Sheets。
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## 描述
+這個專案使用 Python Flask 建置 LINE Bot，整合 Google Sheets 作為資料庫。員工發訊息如 "請假 2025-11-10 到 2025-11-12 事假" 即可申請，系統自動通知主管/HR 審核，並記錄每步歷史。適合小型團隊使用。
+
+- **技術棧**：Python, Flask, LINE Bot SDK, gspread。
+- **部署**：GitHub + Render.com。
+
+## 安裝
+1. Clone Repo：
